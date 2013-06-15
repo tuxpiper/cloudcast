@@ -1,0 +1,5 @@
+build
+dist
+cloudcast.egg-info
+env
+*.pyc
