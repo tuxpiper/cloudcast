@@ -69,13 +69,13 @@ templates simpler and more expressive!
 How do you get the JSON templates?
 ----------------------------------
 
-Once you've got your template python file (let\'s call it template.py), you would:
+Once you've got your template python file (let's call it template.py), you would:
 
 	from cloudcast import Stack
 	stack = Stack(
 		description = "Sample stack that doesn't do much",
 		env = { ... define environment vars here ... },
-		resources_file = "template.ot"
+		resources_file = "template.py"
 	)
 	print stack.dump_json()
 
