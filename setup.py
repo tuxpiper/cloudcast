@@ -11,7 +11,7 @@ setup(
     description = ("Easy and powerful stack templates for AWS CloudFormation"),
     author = "David Losada Carballo",
     author_email = "david@tuxpiper.com",
-    version = "0.0.1",
+    version = "0.0.2",
     packages = find_packages(),
     license = 'MIT',
     keywords = "aws internet cloud cloudformation deployment automation",
@@ -25,8 +25,5 @@ setup(
        "Intended Audience :: System Administrators",
        "License :: OSI Approved :: MIT License",
        "Programming Language :: Python"
-    ],
-    
-    # We may use boto later, for interacting with AWS services, but not yet
-    #install_requires = [ 'boto>=2.7.0' ]    
+    ],  
 )

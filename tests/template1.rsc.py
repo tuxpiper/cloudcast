@@ -1,20 +1,17 @@
 '''
 Test/sample cloudcast template 
 
-Created on Jun 13, 2013
-
 @author: David Losada Carballo <david@tuxpiper.com>
 '''
 
 from cloudcast.template import *
 from cloudcast.library import stack_user
-from cloudcast import stack
-
-stack.set_description("Simple CFN test")
+from _context import stack
 
 keyName = "default"
 
 PreciseAMIs = Mapping({
+    "us-east-1" : { "ebs": "ami-0b9c9f62", "instance": "ami-6f969506" },
     "us-west-2" : { "ebs": "ami-6335a453", "instance": "ami-4933a279" }
 })
 
@@ -25,7 +22,7 @@ SQSQueue2 = Resource("AWS::SQS::Queue")
 AnInstance = Resource(
     "AWS::EC2::Instance",
     ImageId = PreciseAMIs.find(AWS.Region, "ebs"),
-    InstanceType = "m1.small",
+    InstanceType = stack.env['instance_type'],
     KeyName = keyName,
     UserData = { "Fn::Base64" : { "Fn::Join" : ["", [
         '#!/bin/bash\n',

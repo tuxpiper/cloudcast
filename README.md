@@ -9,8 +9,8 @@ sophisticated, it can be hard to work with. You may easily get
 lost in a sea of maps and lists, and it can be hard to keep track of
 references across your resources.
 
-Also, this may be my personal pet peeve, JSON has no syntax for comments! This
-makes templates written for CFN hard to document and maintain.
+Also, this may be my personal pet peeve, but JSON has no syntax for comments!
+This makes templates written for CFN hard to document and maintain.
 
 With CloudCast you can easily create any template you would write for CFN, but
 using plain Python syntax.
@@ -41,7 +41,7 @@ For instance:
 	    ),
 	)
 	
-If you are familiar with AWS and CFN, this structure should be familiar to you.
+If you are familiar with AWS and CFN, this structure shouldn't be strange to you.
 We have just declared an ELB resource with some properties.
 
 Later on, the load balancer may be referenced from a security group, in order to
@@ -71,13 +71,17 @@ How do you get the JSON templates?
 
 Once you've got your template python file (let\'s call it template.py), you would:
 
-	from cloudcast import loader
-	st = loader.StackTemplate("template.py")
-	print set.dump_json()
+	from cloudcast import Stack
+	stack = Stack(
+		description = "Sample stack that doesn't do much",
+		env = { ... define environment vars here ... },
+		resources_file = "template.ot"
+	)
+	print stack.dump_json()
 
 The following will happen:
 
-1. The StackTemplate class will load, examine your code module and find
+1. The Stack class will load, examine your code module and find
 the relevant objects to be included in the CloudFormation template (resources,
 outputs, parameters..). It shouldn't get confused with any other code you
 may have there.
@@ -93,3 +97,8 @@ devote the necessary efforts to evolve this concept.
 If you are looking for an awesome software agency make sure to check their
 website!
 
+[Lifestreams Technology](http://lifestreams.com/) - developing for their
+products has proved to be an excellent ground to develop and put into
+practice new ideas such as the one that originated this project. Thanks
+for the chance to bring CloudCast to the point where it is a key technology
+to support mission-critical operations.

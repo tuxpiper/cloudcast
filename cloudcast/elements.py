@@ -171,3 +171,17 @@ class Resource(StackElement):
         """
         return lambda: \
             CfnSimpleExpr({"Fn::GetAtt" : [ self.ref_name, key ]})
+
+
+class LaunchableResource(Resource):
+    def __init__(self, restype, **kwargs):
+        Resource.__init__(self, restype, **kwargs)
+
+class EC2Instance(LaunchableResource):
+    def __init__(self, **kwargs):
+        ServerResource.__init__(self, "AWS::EC2::Instance", **kwargs)
+
+class EC2LaunchConfiguration(LaunchableResource):
+    def __init__(self, **kwargs):
+        ServerResource.__init__(self, "AWS::AutoScaling::LaunchConfiguration", **kwargs)
+
