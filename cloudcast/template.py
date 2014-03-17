@@ -1,12 +1,14 @@
 '''
-Symbols available to templates 
+Symbols available to templates. Just
 
-Created on Jun 13, 2013
+  from cloudcast.template import *
+
+and use at your heart's content!
 
 @author: David Losada Carballo <david@tuxpiper.com>
 '''
 
-from cloudcast.elements import Parameter, Mapping, Resource, Output
+from cloudcast.elements import Parameter, Mapping, Resource, Output, EC2Instance
 
 class AWS:
     from cloudcast.elements import CfnSimpleExpr

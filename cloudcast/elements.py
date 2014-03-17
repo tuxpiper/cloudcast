@@ -1,8 +1,6 @@
 '''
 Basic definition of the elements available for building CloudFormation stack templates
 
-Created on Jun 13, 2013
-
 @author: David Losada Carballo <david@tuxpiper.com>
 '''
 
@@ -18,6 +16,23 @@ class CfnSimpleExpr(object):
         return self.definition
     def __repr__(self):
         return str(self.definition)
+
+class CloudCastHelperExpr(object):
+    """
+    Helper expressions are interpreted and transformed by resources before passing
+    onto the CloudFormation tempalte
+    """
+    def resolve(self, stack, element):
+        raise NotImplementedError("This is for subclasses to sort out")
+    def cfn_expand(self):
+        return self.resolvedTo
+
+class ThisResourceExpr(CloudCastHelperExpr):
+    """
+    This expression resolves to the resource where it is contained
+    """
+    def resolve(self, stack, element):
+        self.resolvedTo = element.ref_name
 
 class StackElement(object):
     """
@@ -111,7 +126,16 @@ class Resource(StackElement):
     """
     Stack resource
     """
-    this_resource_name = '{ "CloudCast::Fn": "ToBeImplemented" }'
+    @classmethod
+    def ThisName(cls):
+        """
+        Returns a static expression that, when evaluated, will be
+        resolved to the CloudFormation name of the resource where this
+        expression is used. This will be just a string for CloudFormation and,
+        thus, it won't be failing because of recursive element dependencies.
+        """
+        return ThisResourceExpr()
+
     def __init__(self, resource_type, **kwargs):
         self.resource_type = resource_type
         # By default all kwargs are properties
@@ -160,8 +184,37 @@ class Resource(StackElement):
         if not self.el_attrs.has_key('Properties'):
             self.el_attrs['Properties'] = {}
         self.el_attrs['Properties'][key] = value
+
+    def get_property(self, key, default=None):
+        if not self.el_attrs.has_key('Properties') or not self.el_attrs['Properties'].has_key(key):
+            return default
+        return self.el_attrs['Properties'][key]
+
+    def add_metadata_key(self, key, value):
+        if not self.el_attrs.has_key('Metadata'):
+            self.el_attrs['Metadata'] = {}
+        self.el_attrs['Metadata'][key] = value
+
+    def get_metadata_key(self, key, default=None):
+        if not self.el_attrs.has_key('Metadata') or not self.el_attrs['Metadata'].has_key(key):
+            return default
+        return self.el_attrs['Metadata'][key]
         
     def contents(self, stack):
+        # Find and resolve helper expressions before dumping the contents
+        def walk_values(obj):
+            if type(obj) == dict:
+                for v in obj.values():
+                    for vv in walk_values(v): yield vv
+            elif type(obj) in [ list, tuple, set ]:
+                for v in obj:
+                    for vv in walk_values(v): yield vv
+            else:
+                yield obj
+        for value in walk_values(self.el_attrs):
+            if isinstance(value, CloudCastHelperExpr): value.resolve(stack, self)
+        #
+        # Dump the contents
         return (self.ref_name, self.el_attrs)
 
     def __getitem__(self, key):
@@ -175,13 +228,25 @@ class Resource(StackElement):
 
 class LaunchableResource(Resource):
     def __init__(self, restype, **kwargs):
+        self.iscm = None
+        if kwargs.has_key("iscm"):
+            # If an SCM spec is given, build it
+            from cloudcast.iscm import ISCM
+            self.iscm = ISCM(kwargs["iscm"])
+            kwargs.pop("iscm")
         Resource.__init__(self, restype, **kwargs)
+    def contents(self, stack):
+        # Before "spilling the beans", let the iscm update this element
+        if self.iscm is not None:
+            self.iscm.applyTo(self)
+        # Proceed with dumping the contents
+        return Resource.contents(self, stack)
 
 class EC2Instance(LaunchableResource):
     def __init__(self, **kwargs):
-        ServerResource.__init__(self, "AWS::EC2::Instance", **kwargs)
+        LaunchableResource.__init__(self, "AWS::EC2::Instance", **kwargs)
 
 class EC2LaunchConfiguration(LaunchableResource):
     def __init__(self, **kwargs):
-        ServerResource.__init__(self, "AWS::AutoScaling::LaunchConfiguration", **kwargs)
+        LaunchableResource.__init__(self, "AWS::AutoScaling::LaunchConfiguration", **kwargs)
 

@@ -3,8 +3,19 @@ Tools for loading and processing CloudCast templates into CloudFormation JSON te
 
 @author: David Losada Carballo <david@tuxpiper.com>
 '''
-import json
+import json, os.path
 from cloudcast.elements import *
+
+def _caller_folder():
+    """
+    Returns the folder where the code of the caller's caller lives
+    """
+    import inspect
+    caller_file = inspect.stack()[2][1]
+    if os.path.exists(caller_file):
+        return os.path.abspath(os.path.dirname(caller_file))
+    else:
+        return os.path.abspath(os.getcwd())
 
 def _run_resources_file(path, stack):
     """
@@ -12,7 +23,7 @@ def _run_resources_file(path, stack):
     while providing it access to the given stack under the import name '_context'.
     This function returns the module's global dictionary.
     """
-    import imp, os.path, sys, random, string, copy
+    import imp, sys, random, string, copy
     class ContextImporter(object):
         def find_module(self, fullname, path=None):
             if fullname == '_context':
@@ -148,29 +159,32 @@ class _StackResources(object):
         elif isinstance(the_el, Resource):
             self.Resources.append(the_el)
 
-    def dump_to_template_obj(self, t):
+    def dump_to_template_obj(self, stack, t):
         """
         Add resource definitions to the given template object
         """
         if len(self.Parameters) > 0:
-            t['Parameters'] = dict([e.contents(self) for e in self.Parameters])
+            t['Parameters'] = dict([e.contents(stack) for e in self.Parameters])
         if len(self.Mappings) > 0:
-            t['Mappings'] = dict([e.contents(self) for e in self.Mappings])
+            t['Mappings'] = dict([e.contents(stack) for e in self.Mappings])
         if len(self.Resources) > 0:
-            t['Resources'] = dict([e.contents(self) for e in self.Resources])
+            t['Resources'] = dict([e.contents(stack) for e in self.Resources])
         if len(self.Outputs) > 0:
-            t['Outputs'] = dict([e.contents(self) for e in self.Outputs])
+            t['Outputs'] = dict([e.contents(stack) for e in self.Outputs])
 
 class Stack(object):
     """
     A stack template, transformable into JSON to upload to AWS CloudFormation, instrumentable for management
     """    
     def __init__(self, **kwargs):
+        self.base_dir = None
         self.description = None
         self.required_capabilities = []
         self.env = {}
         self.resources = _StackResources()
-        #
+        # Obtain base dir of the caller, if available
+        self.base_dir = _caller_folder()
+        # Process kwargs
         if kwargs.has_key("description"):
             self.description = kwargs["description"]
         if kwargs.has_key("env"):
@@ -183,6 +197,19 @@ class Stack(object):
             self.required_capabilities.append(cap)
 
     def load_resources(self, path):
+        if not os.path.isabs(path):
+            # Search relative to the caller, the stack and cwd
+            search_paths = [
+                os.path.join(_caller_folder(), path),
+                os.path.join(self.base_dir, path),
+                os.path.join(os.getcwd(), path)
+            ]
+            for p in search_paths:
+                if os.path.isfile(p):
+                    path = p
+                    break
+                # if path doesn't exist the function below will fail anyway
+        #
         self.resources.load_template_srcmodule(self, path)
 
     def has_resource(self, name):
@@ -204,7 +231,7 @@ class Stack(object):
         t['AWSTemplateFormatVersion'] = '2010-09-09'        
         if self.description is not None:
             t['Description'] = self.description
-        self.resources.dump_to_template_obj(t)
+        self.resources.dump_to_template_obj(self, t)
 
         return _CustomJSONEncoder(indent=2 if pretty else None,
                                   sort_keys=False).encode(t)                                    
