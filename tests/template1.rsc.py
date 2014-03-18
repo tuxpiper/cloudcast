@@ -9,6 +9,7 @@ from cloudcast.library import stack_user
 from _context import stack
 
 from cloudcast.iscm.cfninit import CfnInit
+from cloudcast.iscm.shell import Shell
 
 keyName = "ec2deploy"
 
@@ -61,6 +62,15 @@ AnInstance = EC2Instance(
                     }
                 }
             ],
+        ),
+        Shell(
+            shell_vars = {
+                'APP_AWS_KEY_ID': stack_user.CloudFormationStackUserKey,
+                'APP_AWS_SECRET_KEY': stack_user.CloudFormationStackUserKey["SecretAccessKey"]
+            },
+            scripts = [
+                Shell.runScript("scripts/sample-script.sh"),
+            ]
         )
     ]
 )

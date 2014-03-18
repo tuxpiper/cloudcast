@@ -50,7 +50,24 @@ class CfnInit(object):
         self.configs[name] = config
         self.config_names.append(name)
 
+    def iscm_cfninit_get_stack_user_key(self):
+        return self.stack_user_key
+
     def install(self, iscm):
+        # Load iscm with our methods so they are available to other iscm classes
+        if not hasattr(iscm, "iscm_cfninit_add_config"):
+            import types
+            iscm_cfninit = self
+            def wrapper_1(self, config, name=None):
+                iscm_cfninit.iscm_cfninit_add_config(config, name)
+            iscm.iscm_cfninit_add_config = types.MethodType(wrapper_1, iscm)
+        if not hasattr(iscm, "iscm_cfninit_get_stack_user_key"):
+            import types
+            iscm_cfninit = self
+            def wrapper_2(self):
+                return iscm_cfninit.iscm_cfninit_get_stack_user_key()
+            iscm.iscm_cfninit_get_stack_user_key = types.MethodType(wrapper_2, iscm)
+        #
         # Add scripting into user data, which will make sure that
         # the cfn-init tools are installed.
         iscm.iscm_ud_append(
@@ -63,13 +80,16 @@ class CfnInit(object):
                 r'$PIP_PATH install %s || FATAL 1 "Unable to install cfn-init tools"' % self.aws_cfn_bootstrap_url,
             ]),
             "\n",
-            "cfn-init -s ", AWS.StackName, 
-            " -r ", Resource.ThisName(),
-            " --region ", AWS.Region,
-            " --access-key ", self.stack_user_key,
-            " --secret-key ", self.stack_user_key["SecretAccessKey"],
-            r' || FATAL 1 "cfn-init unsuccessful"\n',
+            'export AWS__STACK_NAME="', AWS.StackName ,'" ',
+                   'AWS__STACKEL_NAME="', Resource.ThisName() , '" ',
+                   'AWS__BOOTSTRAP_KEY_ID="', self.stack_user_key , '" ',
+                   'AWS__BOOTSTRAP_SECRET_KEY="', self.stack_user_key["SecretAccessKey"] , r'" ',
+                   'AWS__REGION="', AWS.Region , '"\n',
+            r'cfn-init -v -s "$AWS__STACK_NAME" -r "$AWS__STACKEL_NAME" --region "$AWS__REGION" --access-key "$AWS__BOOTSTRAP_KEY_ID" --secret-key "$AWS__BOOTSTRAP_SECRET_KEY"',
+             ' || FATAL 1 "cfn-init unsuccessful"\n',
         )
+
+    def deploy(self, iscm):
         #
         # Load configs into the resource metadata, so cfn-init can find them
         # on runtime and get them done
@@ -80,6 +100,3 @@ class CfnInit(object):
             }
         })
         iscm.iscm_md_update_dict("AWS::CloudFormation::Init", cfninit_metadata)
-        #
-        # Load iscm with our methods so their available to other iscm classes
-

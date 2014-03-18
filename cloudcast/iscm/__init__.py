@@ -16,14 +16,27 @@ class ISCM(object):
     def __init__(self, modules=[]):
         self.userdata_elems = []
         self.metadata = {}
+        # Install the specified modules into this iscm instance
         for mod in modules:
             mod.install(self)
+        # Deploy each module into this iscm, so necessary changes to the
+        # cloudformation template are computed
+        for mod in reversed(modules):
+            mod.deploy(self)
 
     def iscm_ud_append(self, *userdata):
         """
         Append elements to userdata
         """
         self.userdata_elems += list(userdata)
+
+    def iscm_md_get(self, keypath):
+        current = self.metadata
+        for k in string.split(keypath, "."):
+            if type(current) != dict or not current.has_key(k):
+                return None
+            current = current[k]
+        return current
 
     def iscm_md_update_dict(self, keypath, data):
         """
