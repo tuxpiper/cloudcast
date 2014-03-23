@@ -6,12 +6,13 @@ from setuptools import setup, find_packages
 
 setup(
     name = "cloudcast",
-    version = "0.0.4",
+    version = "0.0.5",
     packages = find_packages(),
     package_data = {
         # Script files that contain initial bootstrap sequences
         'cloudcast.iscm': ['scripts/*']
     },
+    install_requires = ['dq>=0.1.2'],
 
     description = ("Easy and powerful stack templates for AWS CloudFormation"),
     author = "David Losada Carballo",

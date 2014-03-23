@@ -8,7 +8,7 @@ and use at your heart's content!
 @author: David Losada Carballo <david@tuxpiper.com>
 '''
 
-from cloudcast.elements import Parameter, Mapping, Resource, Output, EC2Instance
+from cloudcast.elements import Parameter, Mapping, Resource, Output, EC2Instance, EC2LaunchConfiguration
 
 class AWS:
     from cloudcast.elements import CfnSimpleExpr

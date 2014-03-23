@@ -36,17 +36,22 @@ def _run_resources_file(path, stack):
             return mod
     # Temporarily add the context importer into the meta path
     old_meta_path = copy.copy(sys.meta_path)
-    sys.meta_path.append(ContextImporter())
-    # Save the modules list, in order to remove modules loaded here
+    old_path = copy.copy(sys.path)
+    # Save the modules list, in order to remove modules loaded after this point
     old_sys_modules = sys.modules.keys()
     # Run the module
+    # Prepare import environment
     abspath = os.path.abspath(path)
+    sys.meta_path.append(ContextImporter())
+    sys.path.append(os.path.dirname(abspath))   # Enable importing files within module's folder
+    # Perform the importing
     srcf = open(abspath, "r")
     module_name = ''.join(random.choice(string.digits + string.lowercase) for i in range(16))
     srcmodule = imp.load_source("cloudcast._template_" + module_name, abspath, srcf)
     srcf.close()
     # Restore meta path, modules list and return module
     sys.meta_path = old_meta_path
+    sys.path = old_path
     for modname in sys.modules.keys():
         if not modname in old_sys_modules:
             del sys.modules[modname]
@@ -188,7 +193,7 @@ class Stack(object):
         if kwargs.has_key("description"):
             self.description = kwargs["description"]
         if kwargs.has_key("env"):
-            self.env = kwargs["env"]
+            self.env = _env_dict(kwargs["env"])
         if kwargs.has_key("resources_file"):
             self.load_resources(kwargs["resources_file"])
 
@@ -236,3 +241,15 @@ class Stack(object):
         return _CustomJSONEncoder(indent=2 if pretty else None,
                                   sort_keys=False).encode(t)                                    
       
+class _env_dict(dict):
+    def __init__(self, *args, **kw):
+        super(_env_dict,self).__init__(*args, **kw)
+    def required(self, key):
+        if not self.has_key(key):
+            raise KeyError("The stack environment doesn't contain the required entry %s" % key)
+        return self[key]
+    def optional(self, key, default=None):
+        if not self.has_key(key):
+            return default
+        else:
+            return self[key]

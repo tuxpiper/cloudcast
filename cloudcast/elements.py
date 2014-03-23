@@ -77,37 +77,16 @@ class Parameter(StackElement):
     """
     Stack parameter
     """
-    def __init__(self):
-        self.value = None
-    def fix_value(self, value):
-        """
-        It actually turns this parameter in some sort of constant, by assigning programmatically
-        a value to it. This is used when including sub-stacks
-        """
-        if not isinstance(value, CfnSimpleExpr):
-            self.value = CfnSimpleExpr(value)
-        else:
-            self.value = value
-        self.dont_dump = True
-    def cfn_get_reference(self):
-        # If no value assigned, this behaves like a StackElement
-        if self.value is None:
-            return StackElement.cfn_get_reference(self)
-        else:
-            # If value assigned this behaves more like an expression
-            return self.value.cf_expand()
+    def __init__(self, **kwargs):
+        StackElement.__init__(self, **kwargs)
 
 class Mapping(StackElement):
     """
     Stack mapping.
     """    
-    def __init__(self, da_map):
-        StackElement.__init__(self)
+    def __init__(self, mapping):
+        StackElement.__init__(self, **mapping)
         self.is_used = False
-        self.the_map = da_map
-
-    def contents(self, stack):
-        return (self.ref_name, self.the_map)
     
     def find(self, key1, key2):
         self.is_used = True
@@ -232,13 +211,16 @@ class LaunchableResource(Resource):
         if kwargs.has_key("iscm"):
             # If an SCM spec is given, build it
             from cloudcast.iscm import ISCM
-            self.iscm = ISCM(kwargs["iscm"])
+            if isinstance(kwargs["iscm"], ISCM):
+                self.iscm = kwargs["iscm"]
+            else:
+                self.iscm = ISCM(kwargs["iscm"])
             kwargs.pop("iscm")
         Resource.__init__(self, restype, **kwargs)
     def contents(self, stack):
         # Before "spilling the beans", let the iscm update this element
         if self.iscm is not None:
-            self.iscm.applyTo(self)
+            self.iscm.apply_to(self)
         # Proceed with dumping the contents
         return Resource.contents(self, stack)
 
@@ -249,4 +231,3 @@ class EC2Instance(LaunchableResource):
 class EC2LaunchConfiguration(LaunchableResource):
     def __init__(self, **kwargs):
         LaunchableResource.__init__(self, "AWS::AutoScaling::LaunchConfiguration", **kwargs)
-

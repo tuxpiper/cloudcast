@@ -13,10 +13,14 @@ class ISCM(object):
     limited to the scope of what can be done solely within
     CloudFormation.
     """
-    def __init__(self, modules=[]):
+    def __init__(self, context=None, modules=None):
         self.userdata_elems = []
         self.metadata = {}
+        # Load the context
+        if context is None: context = {}
+        self.context = context
         # Install the specified modules into this iscm instance
+        if modules is None: modules = []
         for mod in modules:
             mod.install(self)
         # Deploy each module into this iscm, so necessary changes to the
@@ -66,7 +70,16 @@ class ISCM(object):
             raise KeyError("%s doesn't point to an array" % arraypath)
         current[array_key].append(member)
 
-    def applyTo(self, launchable):
+    def context_lookup(self, vars):
+        """
+        Lookup the variables in the provided dictionary, resolve with entries
+        in the context
+        """
+        for (k,v) in vars.items():
+            if isinstance(v, IscmExpr):
+                vars[k] = v.resolve(self.context)
+
+    def apply_to(self, launchable):
         """
         Apply this ISCM configuration into a launchable resource, such as
         an EC2 instance or an AutoScalingGroup LaunchConfig.
@@ -102,3 +115,71 @@ class ISCM(object):
             if launchable.get_metadata_key(k) is not None:
                 raise NotImplementedError("It's not yet supported to append to existing metadata keys")
             launchable.add_metadata_key(k, self.metadata[k])
+
+    @classmethod
+    def parse_context(cls, context_def, context):
+        # Examine each entry in context_def
+        for (k,v) in context_def.items():
+            if v["required"] and not context.has_key(k):
+                raise KeyError("Context doesn't contain required var %s" % k)
+            if not v["required"] and (not context.has_key(k) or context[k] is None):
+                if v["default"] is not None:
+                    context[k] = v["default"]
+        return context
+
+
+class IscmExpr(object):
+    """
+    Expressions are used while defining module variables. This allows us to
+    perform substitutions based on the context passed to the main ISCM obj.
+    """
+    def resolve(self, context):
+        raise NotImplementedError("Abstract class")
+
+class IscmQExpr(IscmExpr):
+    """
+    Simple string expression, i.e. "{{ var }}" resolves to "value", when
+    context is { "var": "value" }
+    """
+    def __init__(self, q):
+        self.q = q
+    def resolve(self, context):
+        from dq import query
+        return query(self.q, context)
+
+class IscmJoinExpr(IscmExpr):
+    """
+    Maps to CloudFormation's join function, just making sure that we first parse
+    each of the joined members through the context lookup
+    """
+    def __init__(self, token, *members):
+        self.token = token
+        self.members = members
+    def resolve(self, context):
+        from cloudcast.template import join as cfnjoin
+        members = map(lambda m: isinstance(m,IscmExpr) and m.resolve(context) or m, self.members)
+        return cfnjoin(self.token, *members)
+
+def q(query):
+    """
+    Wrapper around IscmQExpr
+    """
+    return IscmQExpr(query)
+
+def join(token, *members):
+    """
+    Wrapper around IscmJoinExpr
+    """
+    return IscmJoinExpr(token, *members)
+
+class context_var:
+    """
+    Class containing static methods that help with the definition of context
+    vars (required/optional with default value)
+    """
+    @classmethod
+    def required(cls):
+        return { "required": True }
+    @classmethod
+    def optional(cls, default):
+        return { "required": False, "default": default }

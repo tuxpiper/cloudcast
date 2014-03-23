@@ -11,7 +11,7 @@ from cloudcast.template import *
 
 stack.add_required_capability("CAPABILITY_IAM")
 
-CloudformationStackUser = Resource(
+CloudFormationStackUser = Resource(
         "AWS::IAM::User",
         Path="/stackusers/",
         Policies=[{
@@ -29,5 +29,5 @@ CloudformationStackUser = Resource(
 CloudFormationStackUserKey = Resource(
         "AWS::IAM::AccessKey",
         Status="Active",
-        UserName=CloudformationStackUser
+        UserName=CloudFormationStackUser
 )
