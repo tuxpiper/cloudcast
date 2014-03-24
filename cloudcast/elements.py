@@ -17,6 +17,18 @@ class CfnSimpleExpr(object):
     def __repr__(self):
         return str(self.definition)
 
+class GetRefNameExpr:
+    """
+    An expression that returns the name of the given element
+    """
+    def __init__(self, element):
+        self.element = element
+    def cfn_expand(self):
+        return self.element.ref_name
+
+def get_ref_name(element):
+    return GetRefNameExpr(element)
+
 class CloudCastHelperExpr(object):
     """
     Helper expressions are interpreted and transformed by resources before passing
