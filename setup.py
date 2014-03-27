@@ -6,7 +6,7 @@ from setuptools import setup, find_packages
 
 setup(
     name = "cloudcast",
-    version = "0.0.6",
+    version = "0.0.7",
     packages = find_packages(),
     package_data = {
         # Script files that contain initial bootstrap sequences

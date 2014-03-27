@@ -21,3 +21,13 @@ def search_file(filepath, *where):
         return None
     else:
         return filepath
+
+def walk_values(obj):
+    if type(obj) == dict:
+        for v in obj.values():
+            for vv in walk_values(v): yield vv
+    elif type(obj) in [ list, tuple, set ]:
+        for v in obj:
+            for vv in walk_values(v): yield vv
+    else:
+        yield obj

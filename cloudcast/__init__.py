@@ -57,7 +57,6 @@ def _run_resources_file(path, stack):
             del sys.modules[modname]
     return srcmodule
     
-
 class _CustomJSONEncoder(json.JSONEncoder):
     """
     Extended JSON encoder, it handles references to stack elements
@@ -73,9 +72,9 @@ class _CustomJSONEncoder(json.JSONEncoder):
         else:
             return super(self.__class__, self).default(o)
 
-class _StackResources(object):
+class _stackElements(object):
     """
-    This class is a dictionary of stack's AWS resources
+    This class is a glorified dictionary of stack's elements
     """
     def __init__(self):
         self.elements = {}
@@ -83,6 +82,7 @@ class _StackResources(object):
         self.Mappings = []
         self.Resources = []
         self.Outputs = []
+        self.launchables = []
 
     def load_template_srcmodule(self, stack, path):
         """
@@ -163,6 +163,9 @@ class _StackResources(object):
             self.Outputs.append(the_el)
         elif isinstance(the_el, Resource):
             self.Resources.append(the_el)
+        # If the resource is launchable, keep track
+        if isinstance(the_el, LaunchableResource):
+            self.launchables.append(the_el)
 
     def dump_to_template_obj(self, stack, t):
         """
@@ -186,7 +189,7 @@ class Stack(object):
         self.description = None
         self.required_capabilities = []
         self.env = {}
-        self.resources = _StackResources()
+        self.elements = _stackElements()
         # Obtain base dir of the caller, if available
         self.base_dir = _caller_folder()
         # Process kwargs
@@ -196,6 +199,10 @@ class Stack(object):
             self.env = _env_dict(kwargs["env"])
         if kwargs.has_key("resources_file"):
             self.load_resources(kwargs["resources_file"])
+
+    def add_element(self, element, name):
+        self.elements.name_stack_element(element, name)
+        self.elements.add_stack_element(element)
 
     def add_required_capability(self, cap):
         if cap not in self.required_capabilities:
@@ -215,17 +222,24 @@ class Stack(object):
                     break
                 # if path doesn't exist the function below will fail anyway
         #
-        self.resources.load_template_srcmodule(self, path)
+        self.elements.load_template_srcmodule(self, path)
 
-    def has_resource(self, name):
-        """
-        """
-        raise NotImplementedError
+    def has_element(self, name):
+        return self.elements.elements.has_key(name)
 
-    def get_resource(self, name):
-        """
-        """
-        raise NotImplementedError
+    def get_element(self, name):
+        return self.elements.elements[name]
+
+    def get_launchable_resources(self):
+        return self.elements.launchables
+
+    def fix_broken_references(self, placeholder="#!broken_ref!#"):
+        for val in self.elements.elements:
+            if isinstance(val, StackElement):
+                # Check if the element belongs to this stack
+                el_name = val.ref_name
+                if not self.has_element(el_name) or not self.get_element(el_name) == val:
+                    raise RuntimeError("Broken reference: " + str(val))
         
     def dump_json(self, pretty=True):
         """
@@ -236,7 +250,7 @@ class Stack(object):
         t['AWSTemplateFormatVersion'] = '2010-09-09'        
         if self.description is not None:
             t['Description'] = self.description
-        self.resources.dump_to_template_obj(self, t)
+        self.elements.dump_to_template_obj(self, t)
 
         return _CustomJSONEncoder(indent=2 if pretty else None,
                                   sort_keys=False).encode(t)                                    

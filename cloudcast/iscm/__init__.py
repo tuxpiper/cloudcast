@@ -1,6 +1,7 @@
 #!/usr/bin/python
 
 import string
+from cloudcast.template import join as cfnjoin
 
 class ISCM(object):
     """
@@ -13,20 +14,58 @@ class ISCM(object):
     limited to the scope of what can be done solely within
     CloudFormation.
     """
-    def __init__(self, context=None, modules=None):
+    def __init__(self, context=None, processors=None, modules=None):
         self.userdata_elems = []
         self.metadata = {}
+        # Flags and heap are temporary storage for the ISCM extensions,
+        # their contents are not reflected in the CloudFormation template
+        self.flags = {}     # boolean only, false by default
+        self.heap = {}      # any value, None by default
+        # Notify this waitconditionhandle when the ISCM finishes executing:
+        self.wc_handle = None
         # Load the context
         if context is None: context = {}
         self.context = context
-        # Install the specified modules into this iscm instance
+        # Install the processors
+        if processors is None: processors = []
+        self.processors = processors
+        for proc in self.processors:
+            proc.install(self)
+        # Install the specified modules 
         if modules is None: modules = []
         for mod in modules:
             mod.install(self)
         # Deploy each module into this iscm, so necessary changes to the
-        # cloudformation template are computed
-        for mod in reversed(modules):
+        # processors are performed
+        for mod in modules:
             mod.deploy(self)
+        # Deploy each processor, in reverse order so changes trickle down
+        # to the base later processor
+        for proc in reversed(self.processors):
+            proc.deploy(self)
+
+    def add_processor(self, proc):
+        self.processors.append(proc)
+        proc.install(self)
+
+    def is_buildable(self):
+        return False
+
+    def iscm_set_flag(self, name, boolean=True):
+        self.flags[name] = bool(boolean)
+
+    def iscm_get_flag(self, name):
+        if not self.flags.has_key(name):
+            return False
+        return self.flags[name]
+
+    def iscm_set_var(self, name, value):
+        self.heap[name] = value
+
+    def iscm_get_var(self, name):
+        if not self.heap.has_key(name):
+            return None
+        return self.heap[name]
 
     def iscm_ud_append(self, *userdata):
         """
@@ -70,6 +109,12 @@ class ISCM(object):
             raise KeyError("%s doesn't point to an array" % arraypath)
         current[array_key].append(member)
 
+    def iscm_wc_signal_on_end(self, wc_handle_elem):
+        """
+        Notify WaitConditon when the iSCM is done
+        """
+        self.wc_handle = wc_handle_elem
+
     def context_lookup(self, vars):
         """
         Lookup the variables in the provided dictionary, resolve with entries
@@ -95,18 +140,27 @@ class ISCM(object):
                         r'FATAL() { code=$1; shift; echo "[FATAL] $*" >&2; exit $code; }',
                         r'ERROR() { echo "[ERROR] $*" >&2 ; }',
                         r'WARN()  { echo "[WARNING] $*" >&2 ; }',
-                        r'INFO()  { echo "[INFO] $*" >&2 ; }',
+                        r'INFO()  { echo "[INFO] $*" >&2 ; }', "",
+                    ])
+                ] + (self.wc_handle is not None and [
+                    cfnjoin("",
+                        r'ISCM_WCHANDLE_URL="', self.wc_handle, '"\n'
+                    )
+                ] or []) + [
+                    "\n".join([
                         r'{',
                         r'INFO "CloudCast ISCM booting on $(date)"',
                         "\n\n"
-                        ])
+                    ])
                 ] + self.userdata_elems + [
-                    "\n".join([
+                    "\n".join([ "",
+                        r'iscm_result=$?',
+                        r'[ -n "$ISCM_WCHANDLE_URL" ] && [ -n "$(which cfn-signal)" ] && cfn-signal -e $iscm_result $ISCM_WCHANDLE_URL',
                         '\nINFO "CloudCast ISCM successfully completed on $(date)"',
                         '} 2>&1 | tee -a /iscm.log\n'
                     ])
-                ] ]
-            } 
+                ]
+            ]} 
         }
         launchable.add_property("UserData", user_data)
 
@@ -125,6 +179,11 @@ class ISCM(object):
             if not v["required"] and (not context.has_key(k) or context[k] is None):
                 if v["default"] is not None:
                     context[k] = v["default"]
+            if v.has_key("iscm_ctxt"):
+                if not context.has_key("_iscm"):
+                    context["_iscm"] = {}
+                iscm_key = v["iscm_ctxt"]
+                context["_iscm"][iscm_key] = context[k]
         return context
 
 
@@ -156,7 +215,6 @@ class IscmJoinExpr(IscmExpr):
         self.token = token
         self.members = members
     def resolve(self, context):
-        from cloudcast.template import join as cfnjoin
         members = map(lambda m: isinstance(m,IscmExpr) and m.resolve(context) or m, self.members)
         return cfnjoin(self.token, *members)
 
@@ -183,3 +241,6 @@ class context_var:
     @classmethod
     def optional(cls, default):
         return { "required": False, "default": default }
+    @classmethod
+    def cfninit_key(cls):
+        return { "required": True, "iscm_ctxt": "cfninit_key" }

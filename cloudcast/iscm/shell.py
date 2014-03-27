@@ -61,25 +61,30 @@ class Shell(object):
     def deploy(self, iscm):
         # If no name has been given for this shell iscm, assign one sequentially
         if self.name is None:
-            last_anonymous_k = iscm.iscm_md_get("shell_iscm.last_anonymous_k")
+            last_anonymous_k = iscm.iscm_get_var("shell_iscm::last_anonymous_k")
             if last_anonymous_k is None:
                 last_anonymous_k = 0
             last_anonymous_k += 1
             self.name = "shell_%d" % last_anonymous_k
-            iscm.iscm_md_update_dict("shell_iscm", { "last_anonymous_k": last_anonymous_k })
+            iscm.iscm_set_var("shell_iscm::last_anonymous_k", last_anonymous_k)
 
         # Create a metadata entry that holds the relationship between variable names and their values
         iscm.context_lookup(self.shell_vars)        # resolve references to iscm context
         iscm.iscm_md_update_dict("shell_iscm.instances.%s" % self.name, { "vars": self.shell_vars })
 
-        # Create script file with initialization scripts
+        # Create script file with all initialization scripts code
         init_script_path = "/root/shell-iscm/init-%s.sh" % self.name
         init_script_content = self._load_scripts(self.init_scripts)
 
-        #
-        # Add config for writing the iscm init script to disk
+        # Collect all scripts' code, starting with the shebang and processing the init scripts
+        script_content = \
+            '#!/bin/bash\n' + \
+            '. %s\n' % init_script_path
+
+        script_content = self._load_scripts(self.scripts, script_content)
+        # Add cfn-init config to write and execute the user specified scripts
         stack_user_key = iscm.iscm_cfninit_get_stack_user_key()
-        iscm_config = {
+        shell_config = {
             "files": {
                 init_script_path : {
                     "content": {
@@ -98,20 +103,7 @@ class Shell(object):
                     "mode": "000700",
                     "owner": "root",
                     "group": "root"
-                }
-            }
-        }
-        iscm.iscm_cfninit_add_config(iscm_config, "iscm-shell-init")
-
-        # Collect all scripts' code, starting with the shebang and processing the init scripts
-        script_content = \
-            '#!/bin/bash\n' + \
-            '. %s\n' % init_script_path
-
-        script_content = self._load_scripts(self.scripts, script_content)
-        # Add cfn-init config to write and execute the user specified scripts
-        shell_config = {
-            "files": {
+                },
                 "/root/shell-iscm/%s.sh" % self.name: {
                     "content": script_content,
                     "mode": "000700",

@@ -15,9 +15,18 @@ class CfnSimpleExpr(object):
     def cfn_expand(self):
         return self.definition
     def __repr__(self):
-        return str(self.definition)
+        return "<CfnSimpleExpr: '%s'>" % self.definition
 
-class GetRefNameExpr:
+class CfnGetAttrExpr(object):
+    def __init__(self, el, attr):
+        self.el = el
+        self.attr = attr
+    def cfn_expand(self):
+        return CfnSimpleExpr({"Fn::GetAtt" : [ self.el.ref_name, self.attr ]})
+    def __repr__(self):
+        return "<CfnGetAttrExpr: '%s', '%s'>" % (self.el.ref_name, self.attr)
+
+class GetRefNameExpr(object):
     """
     An expression that returns the name of the given element
     """
@@ -25,6 +34,39 @@ class GetRefNameExpr:
         self.element = element
     def cfn_expand(self):
         return self.element.ref_name
+    def __repr__(self):
+        return "<GetRefNameExpr: '%s', '%s'>" % self.element.ref_name
+
+
+class CfnRegionExpr(object): 
+    def cfn_expand(self):
+        return { "Ref" : "AWS::Region" }
+    def resolve(self, stack=None, element=None, cfn_env=None):
+        if cfn_env.has_key("region"):
+            return cfn_env["region"]
+    def __repr__(self):
+        return "<CfnRegionExpr>"
+
+class MappingLookupExpr(object):
+    """
+    An expression that performs lookup in a mapping
+    """
+    def __init__(self, mapping, key1, key2):
+        self.mapping = mapping
+        self.key1 = key1
+        self.key2 = key2
+    def cfn_expand(self):
+        return {"Fn::FindInMap" : [ self.mapping.ref_name, self.key1, self.key2 ]}
+    def resolve(self, stack=None, element=None, cfn_env=None):
+        keyval1 = self.key1
+        keyval2 = self.key2
+        if hasattr(keyval1, "resolve"):
+            keyval1 = keyval1.resolve(stack, element, cfn_env)
+        if hasattr(keyval2, "resolve"):
+            keyval2 = keyval2.resolve(stack, element, cfn_env)
+        return self.mapping.el_attrs[keyval1][keyval2]
+    def __repr__(self):
+        return "<MappingLookupExpr: '%s', '%s', '%s'>" % (self.mapping.ref_name, self.key1, self.key2)
 
 def get_ref_name(element):
     return GetRefNameExpr(element)
@@ -43,8 +85,10 @@ class ThisResourceExpr(CloudCastHelperExpr):
     """
     This expression resolves to the resource where it is contained
     """
-    def resolve(self, stack, element):
+    def resolve(self, stack=None, element=None, cfn_env=None):
         self.resolvedTo = element.ref_name
+    def __repr__(self):
+        return "<ThisResourceExpr>"
 
 class StackElement(object):
     """
@@ -102,10 +146,7 @@ class Mapping(StackElement):
     
     def find(self, key1, key2):
         self.is_used = True
-        return lambda: \
-            CfnSimpleExpr({"Fn::FindInMap" :
-                [ self.ref_name, key1, key2 ]
-            })
+        return MappingLookupExpr(self, key1, key2)
             
 class Output(StackElement):
     """
@@ -129,41 +170,46 @@ class Resource(StackElement):
 
     def __init__(self, resource_type, **kwargs):
         self.resource_type = resource_type
-        # By default all kwargs are properties
-        properties = copy.copy(kwargs)
-        # Except metadata, it is an element attribute of its own
-        if kwargs.has_key('Metadata'):
-            properties.pop('Metadata')
-            metadata = kwargs['Metadata']
+        # If 'Properties' not specified, all kwargs are properties
+        if not kwargs.has_key("Properties"):
+            properties = copy.copy(kwargs)
+            # except Metadata, it is an element attribute of its own
+            if kwargs.has_key('Metadata'):
+                properties.pop('Metadata')
+                metadata = kwargs['Metadata']
+            else:
+                metadata = None
+            # And DependsOn, that is also on its own
+            if kwargs.has_key('DependsOn'):
+                properties.pop('DependsOn')
+                depends_on = kwargs['DependsOn']
+            else:
+                depends_on = None
+            # DeletionPolicy handling
+            if kwargs.has_key('DeletionPolicy'):
+                properties.pop('DeletionPolicy')
+                deletion_policy = kwargs['DeletionPolicy']
+            else:
+                deletion_policy = None
+            # UpdatePolicy handling
+            if kwargs.has_key('UpdatePolicy'):
+                properties.pop('UpdatePolicy')
+                update_policy = kwargs['UpdatePolicy']
+            else:
+                update_policy = None
+            # UpdatePolicy handling
+            StackElement.__init__(self,
+                Type=resource_type,
+                Metadata=metadata,
+                DependsOn=depends_on,
+                Properties=properties,
+                DeletionPolicy = deletion_policy,
+                UpdatePolicy = update_policy
+            )
         else:
-            metadata = None
-        # And DependsOn, that is also on its own
-        if kwargs.has_key('DependsOn'):
-            properties.pop('DependsOn')
-            depends_on = kwargs['DependsOn']
-        else:
-            depends_on = None
-        # DeletionPolicy handling
-        if kwargs.has_key('DeletionPolicy'):
-            properties.pop('DeletionPolicy')
-            deletion_policy = kwargs['DeletionPolicy']
-        else:
-            deletion_policy = None
-        # UpdatePolicy handling
-        if kwargs.has_key('UpdatePolicy'):
-            properties.pop('UpdatePolicy')
-            update_policy = kwargs['UpdatePolicy']
-        else:
-            update_policy = None
-        # UpdatePolicy handling
-        StackElement.__init__(self,
-            Type=resource_type,
-            Metadata=metadata,
-            DependsOn=depends_on,
-            Properties=properties,
-            DeletionPolicy = deletion_policy,
-            UpdatePolicy = update_policy
-        )
+            StackElement.__init__(self,
+                Type=resource_type,
+                **copy.copy(kwargs))
         
     def add_dependency(self, dep):
         if not self.el_props.has_key("DependsOn"):
@@ -193,15 +239,7 @@ class Resource(StackElement):
         
     def contents(self, stack):
         # Find and resolve helper expressions before dumping the contents
-        def walk_values(obj):
-            if type(obj) == dict:
-                for v in obj.values():
-                    for vv in walk_values(v): yield vv
-            elif type(obj) in [ list, tuple, set ]:
-                for v in obj:
-                    for vv in walk_values(v): yield vv
-            else:
-                yield obj
+        from cloudcast._utils import walk_values
         for value in walk_values(self.el_attrs):
             if isinstance(value, CloudCastHelperExpr): value.resolve(stack, self)
         #
@@ -213,8 +251,10 @@ class Resource(StackElement):
         [] operator for a resource element is equivalent to calling
         cloudformation's "Fn::GetAtt"
         """
-        return lambda: \
-            CfnSimpleExpr({"Fn::GetAtt" : [ self.ref_name, key ]})
+        return CfnGetAttrExpr(self, key)
+
+    def __repr__(self):
+        return "<Resource('%s')>" % self.ref_name
 
 
 class LaunchableResource(Resource):
@@ -229,6 +269,7 @@ class LaunchableResource(Resource):
                 self.iscm = ISCM(kwargs["iscm"])
             kwargs.pop("iscm")
         Resource.__init__(self, restype, **kwargs)
+    
     def contents(self, stack):
         # Before "spilling the beans", let the iscm update this element
         if self.iscm is not None:
@@ -236,10 +277,53 @@ class LaunchableResource(Resource):
         # Proceed with dumping the contents
         return Resource.contents(self, stack)
 
+    def is_buildable(self):
+        if self.iscm is None:
+            return False
+        return self.iscm.is_buildable()
+
+    def resolve_ami(self, **kwargs):
+        ami = self.el_attrs["Properties"]["ImageId"]
+        if hasattr(ami, "resolve"):
+            ami = ami.resolve(stack=None, element=self, cfn_env=kwargs)
+        return ami
+
 class EC2Instance(LaunchableResource):
     def __init__(self, **kwargs):
         LaunchableResource.__init__(self, "AWS::EC2::Instance", **kwargs)
+    @classmethod
+    def standalone_from_launchable(cls, launch):
+        """
+        Given a launchable resource, create a definition of a standalone
+        instance, which doesn't depend on or contain references to other
+        elements.
+        """
+        attrs = copy.copy(launch.el_attrs)
+        # Remove attributes we overwrite / don't need
+        del attrs["Type"]
+        if attrs.has_key("DependsOn"):
+            del attrs["DependsOn"]
+        if attrs["Properties"].has_key("SpotPrice"):
+            del attrs["Properties"]["SpotPrice"]
+        if attrs["Properties"].has_key("InstanceMonitoring"):
+            del attrs["Properties"]["InstanceMonitoring"]
+        if attrs["Properties"].has_key("SecurityGroups"):
+            del attrs["Properties"]["SecurityGroups"]
+        if attrs["Properties"].has_key("InstanceId"):
+            raise RuntimeError("Can't make instance from launchable containing InstanceId property")
+        inst = EC2Instance(**attrs)
+        # TODO: shallow copy?
+        inst.iscm = launch.iscm
+        return inst
 
 class EC2LaunchConfiguration(LaunchableResource):
     def __init__(self, **kwargs):
         LaunchableResource.__init__(self, "AWS::AutoScaling::LaunchConfiguration", **kwargs)
+
+class WaitCondition(Resource):
+    def __init__(self, **kwargs):
+        Resource.__init__(self, "AWS::CloudFormation::WaitCondition", **kwargs)
+
+class WaitConditionHandle(Resource):
+    def __init__(self, **kwargs):
+        Resource.__init__(self, "AWS::CloudFormation::WaitConditionHandle", **kwargs)

@@ -10,11 +10,11 @@ and use at your heart's content!
 
 from cloudcast.elements import \
 	Parameter, Mapping, Resource, Output, EC2Instance, EC2LaunchConfiguration, \
-	get_ref_name
+	WaitCondition, WaitConditionHandle, get_ref_name
 
 class AWS:
-    from cloudcast.elements import CfnSimpleExpr
-    Region = CfnSimpleExpr({ "Ref" : "AWS::Region" })
+    from cloudcast.elements import CfnSimpleExpr, CfnRegionExpr
+    Region = CfnRegionExpr()
     StackName = CfnSimpleExpr({ "Ref" : "AWS::StackName" })
     AZs = CfnSimpleExpr({ "Fn::GetAZs" : "" })
 
