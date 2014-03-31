@@ -4,7 +4,7 @@ ERROR() { echo "[ERROR] $*" >&2 ; }
 WARN()  { echo "[WARNING] $*" >&2 ; }
 INFO()  { echo "[INFO] $*" >&2 ; }
 
-{ : ${SHELL_ISCM_NAME:?} ${SHELL_ISCM_METADATA_VARS_KEY:?} ; } || FATAL 1 "Missing required vars"
+{ : ${SHELL_ISCM_NAME:?} ; } || FATAL 1 "Missing required vars"
 
 get_instance_id() { wget -q -O - http://169.254.169.254/latest/meta-data/instance-id ; }
 export AWS__INSTANCE_ID=$(get_instance_id)
@@ -32,4 +32,4 @@ EOF
     rm $stack_vars_file
 }
 
-load_shell_vars
+[ -n "${SHELL_ISCM_METADATA_VARS_KEY}" ] && load_shell_vars

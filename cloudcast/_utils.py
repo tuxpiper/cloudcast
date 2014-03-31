@@ -31,3 +31,25 @@ def walk_values(obj):
             for vv in walk_values(v): yield vv
     else:
         yield obj
+
+from contextlib import contextmanager
+@contextmanager
+def in_mem_gzip_file(src_path, basename, mtime=0.0):
+    from gzip import GzipFile
+    from StringIO import StringIO
+    stringbuf = StringIO()
+    with open(src_path, "rb") as source:
+        with GzipFile(filename=basename, mode="w", compresslevel=9, fileobj=stringbuf, mtime=mtime) as gz:
+            gz.write(source.read())
+    yield stringbuf
+    stringbuf.close()
+
+@contextmanager
+def in_mem_gzip(contents, basename, mtime=0.0):
+    from gzip import GzipFile
+    from StringIO import StringIO
+    stringbuf = StringIO()
+    with GzipFile(filename=basename, mode="w", compresslevel=9, fileobj=stringbuf, mtime=mtime) as gz:
+        gz.write(contents)
+    yield stringbuf
+    stringbuf.close()

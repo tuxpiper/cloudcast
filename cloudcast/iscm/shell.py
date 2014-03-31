@@ -69,8 +69,13 @@ class Shell(object):
             iscm.iscm_set_var("shell_iscm::last_anonymous_k", last_anonymous_k)
 
         # Create a metadata entry that holds the relationship between variable names and their values
-        iscm.context_lookup(self.shell_vars)        # resolve references to iscm context
-        iscm.iscm_md_update_dict("shell_iscm.instances.%s" % self.name, { "vars": self.shell_vars })
+        if self.shell_vars:
+            shell_vars_md_entry = "shell_iscm.instances.%s" % self.name
+            self.shell_vars = iscm.context_lookup(self.shell_vars)        # resolve references to iscm context
+            iscm.iscm_md_update_dict(shell_vars_md_entry, { "vars": self.shell_vars })
+            shell_vars_md_entry += ".vars"
+        else:
+            shell_vars_md_entry = ""
 
         # Create script file with all initialization scripts code
         init_script_path = "/root/shell-iscm/init-%s.sh" % self.name
@@ -95,7 +100,7 @@ class Shell(object):
                             'AWS__BOOTSTRAP_SECRET_KEY="', stack_user_key["SecretAccessKey"] , r'" ',
                             'AWS__REGION="', AWS.Region , '"\n\n',
                             'SHELL_ISCM_NAME="%s"\n' % self.name,
-                            'SHELL_ISCM_METADATA_VARS_KEY="shell_iscm.instances.%s.vars"\n' % self.name,
+                            'SHELL_ISCM_METADATA_VARS_KEY="%s"\n' % shell_vars_md_entry,
                             'SHELL_ISCM_INIT_SCRIPT="%s"\n' % init_script_path,
                             init_script_content
                         ] ]

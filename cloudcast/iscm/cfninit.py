@@ -2,8 +2,9 @@
 import copy, types
 
 _default_get_pip_url = "https://raw.github.com/pypa/pip/master/contrib/get-pip.py"
-_default_aws_cfn_bootstrap_url = "https://s3.amazonaws.com/cloudformation-examples/aws-cfn-bootstrap-1.3.14.tar.gz"
+_default_aws_cfn_bootstrap_url = "https://s3.amazonaws.com/cloudformation-examples/aws-cfn-bootstrap-1.3.16.tar.gz"
 
+from cloudcast.iscm import IscmExpr
 from cloudcast.template import AWS, Resource
 
 class CfnAttrAccess(object):
@@ -27,7 +28,7 @@ class CfnInit(object):
     def __init__(self, **kwargs):
         if kwargs.has_key('configs'):
             # An array of configs
-            self.configs = configs
+            self.configs = kwargs['configs']
         else:
             # A single config, passed directly as kwargs
             self.configs = [kwargs]
@@ -47,12 +48,91 @@ class CfnInit(object):
         else:
             raise RuntimeError("Unrecognized container for configs")
 
+
+
+class CfnEmbedFile(object):
+    """
+    Embed a file into the cfn stack. By default, it gzips and base-64 encodes
+    the file contents. The contents are gunzipped as part of the instance
+    initialization process.
+    """
+    def __init__(self, **kwargs):
+        # Locate the file
+        from cloudcast._utils import caller_folder, search_file
+        from os import getcwd
+        from os.path import basename
+        #
+        search_paths = [ caller_folder(), getcwd() ]
+        if kwargs.has_key("src_file"):
+            self.basename = basename(kwargs['src_file'])
+            self.src_path = search_file(kwargs['src_file'], *search_paths)
+            if self.src_path is None:
+                raise RuntimeError("File %s couldn't be found" % kwargs['src_file'])
+            self.contents = None
+        elif kwargs.has_key("contents"):
+            self.contents = kwargs['contents']
+            self.src_path = None
+            self.basename = "noname"
+        else:
+            raise RuntimeError("src_file or contents ought to be specified")
+        #
+        if not kwargs.has_key("dest_path"):
+            raise RuntimeError("No dest_path specified")
+        self.dest_path = kwargs['dest_path']
+        # Save extra attributes
+        self.attrs = dict(owner='root', group='root', mode='000644')
+        if kwargs.has_key('owner'):
+            self.attrs['owner'] = kwargs['owner']
+        if kwargs.has_key('group'):
+            self.attrs['group'] = kwargs['group']
+        if kwargs.has_key('mode'):
+            self.attrs['mode'] = kwargs['mode']
+
+    def install(self, iscm):
+        if not iscm.iscm_get_flag("cfninit_installed"):
+            iscm.add_processor(CfnInitISCM(iscm.context["_iscm"]["cfninit_key"]))
+
+    def deploy(self, iscm):
+        # Read and gzip-encode the file
+        gz_dest_path = self.dest_path + ".gz"
+        def create_config(gzstr):
+            # Create a config that writes and ungzips file contents
+            from base64 import b64encode
+            config = dict(
+                files={
+                    gz_dest_path : dict(
+                        encoding="base64",
+                        content=b64encode(gzstr.getvalue()),
+                        group=self.attrs['group'],
+                        owner=self.attrs['owner'],
+                        mode=self.attrs['mode']
+                    )
+                },
+                commands={
+                    "gunzip-%s" % self.basename : dict(
+                        command="gunzip -n -f %s" % gz_dest_path
+                    )
+                }
+            )
+            iscm.iscm_cfninit_add_config(config)
+        #
+        from cloudcast._utils import in_mem_gzip, in_mem_gzip_file
+        if self.src_path is not None:
+            with in_mem_gzip_file(self.src_path, self.basename) as gzstr:
+                create_config(gzstr)
+        else:
+            if isinstance(self.contents, IscmExpr):
+                self.contents = self.contents.resolve(iscm.context)
+            with in_mem_gzip(self.contents, self.basename) as gzstr:
+                create_config(gzstr)
+
+
 class CfnInitISCM(object):
     def __init__(self, stack_user_key, **kwargs):
         self.configs = {}
         self.config_names = []      # Keeps runtime order of configs
         self.config_sets = {}       # Custom order/set of configs to be run
-        self.run_config_sets = [ "default" ]   # Config sets to be run
+        self.run_config_sets = "default"   # Config sets to be run
         self.unnamed_config_k = 0   # We use this to name configs with no name
         #
         # Take care of some bootstrapping params here

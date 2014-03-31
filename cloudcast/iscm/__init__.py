@@ -120,9 +120,13 @@ class ISCM(object):
         Lookup the variables in the provided dictionary, resolve with entries
         in the context
         """
+        while isinstance(vars, IscmExpr):
+            vars = vars.resolve(self.context)
+        #
         for (k,v) in vars.items():
             if isinstance(v, IscmExpr):
                 vars[k] = v.resolve(self.context)
+        return vars
 
     def apply_to(self, launchable):
         """
@@ -195,9 +199,18 @@ class IscmExpr(object):
     def resolve(self, context):
         raise NotImplementedError("Abstract class")
 
+class IscmPythonExpr(IscmExpr):
+    """
+    Evaluates a python expression, with the context as global dictionary
+    """
+    def __init__(self, expr):
+        self.expr = expr
+    def resolve(self, context):
+        return eval(self.expr, context)
+
 class IscmQExpr(IscmExpr):
     """
-    Simple string expression, i.e. "{{ var }}" resolves to "value", when
+    Simple string expression, i.e. ".var" resolves to "value", when
     context is { "var": "value" }
     """
     def __init__(self, q):
@@ -205,6 +218,21 @@ class IscmQExpr(IscmExpr):
     def resolve(self, context):
         from dq import query
         return query(self.q, context)
+
+class IscmDictsExpr(IscmExpr):
+    """
+    Expression to join several dictionary-like expressions
+    """
+    def __init__(self, *dicts):
+        self.dicts = dicts
+    def resolve(self, context):
+        def _normalize_to_items(dict_expr):
+            d = dict_expr
+            while not isinstance(d, dict):
+                if isinstance(d, IscmExpr):
+                    d = d.resolve(context)
+            return d.items()
+        return dict( reduce(lambda r,x: r + _normalize_to_items(x), self.dicts, []) )            
 
 class IscmJoinExpr(IscmExpr):
     """
@@ -223,6 +251,18 @@ def q(query):
     Wrapper around IscmQExpr
     """
     return IscmQExpr(query)
+
+def dicts(*dicts):
+    """
+    Wrapper around IscmDictsExpr
+    """
+    return IscmDictsExpr(*dicts)
+
+def expr(expr):
+    """
+    Wrapper around IscmPythonExpr
+    """
+    return IscmPythonExpr(expr)
 
 def join(token, *members):
     """
