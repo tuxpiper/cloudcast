@@ -153,6 +153,9 @@ class Phase(object):
             for mod in self.modules:
                 mod.deploy(iscm)
 
+    def __repr__(self):
+        return "<%s('%s')>" % (self.__class__.__name__, self.phase_name)
+
     @contextmanager
     def _hijacked_iscm_calls(self, iscm):
         # We intercept a couple of iscm calls, so we can obtain the actions
