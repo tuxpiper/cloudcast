@@ -22,3 +22,8 @@ class AWS:
 def join(token, *kargs):
     from cloudcast.elements import CfnSimpleExpr
     return CfnSimpleExpr({ "Fn::Join" : [ token, list(kargs) ] })
+
+# Wrapper around Fn::Select cfn function
+def select(listOfObjects, index):
+    from cloudcast.elements import CfnSelectExpr
+    return CfnSelectExpr(listOfObjects, index)

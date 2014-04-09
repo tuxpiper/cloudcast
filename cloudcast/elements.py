@@ -47,6 +47,21 @@ class CfnRegionExpr(object):
     def __repr__(self):
         return "<CfnRegionExpr>"
 
+class CfnSelectExpr(object):
+    def __init__(self, listOfObjects, index):
+        self.listOfObjects = listOfObjects
+        self.index = index
+    def cfn_expand(self):
+        listOfObjects = self.listOfObjects
+        index = self.index
+        #
+        if hasattr(listOfObjects, "cfn_expand"):
+            listOfObjects = listOfObjects.cfn_expand()
+        if hasattr(index, "cfn_expand"):
+            index = index.cfn_expand()
+        #
+        return CfnSimpleExpr({"Fn::Select": [ index, listOfObjects ]})
+
 class MappingLookupExpr(object):
     """
     An expression that performs lookup in a mapping
