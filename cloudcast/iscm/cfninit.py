@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 import copy, types
 
-_default_get_pip_url = "https://raw.github.com/pypa/pip/master/contrib/get-pip.py"
+_default_get_pip_url = "https://raw.githubusercontent.com/pypa/pip/develop/contrib/get-pip.py"
 _default_aws_cfn_bootstrap_url = "https://s3.amazonaws.com/cloudformation-examples/aws-cfn-bootstrap-1.3.16.tar.gz"
 
 from cloudcast.iscm import IscmExpr
@@ -203,7 +203,7 @@ class CfnInitISCM(object):
         iscm.iscm_ud_append(
             "\n".join([
                 r'[ -z "`which python`" ] && FATAL 1 "Unable to find python"',
-                r'[ -z "`which pip`" ] && [ ! -x /usr/local/bin/pip ] && { curl %s | python; }' % self.get_pip_url,
+                r'[ -z "`which pip`" ] && [ ! -x /usr/local/bin/pip ] && { curl -L %s | python; }' % self.get_pip_url,
                 r'PIP_PATH=`which pip`',
                 r'PIP_PATH=${PIP_PATH:-/usr/local/bin/pip}',
                 r'[ ! -x "$PIP_PATH" ] && FATAL 1 "Unable to find/install pip, which is required"',
