@@ -202,12 +202,16 @@ class CfnInitISCM(object):
 
         iscm.iscm_ud_append(
             "\n".join([
+#                r'PATH=$PATH:/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin:/opt/aws/bin',
                 r'[ -z "`which python`" ] && FATAL 1 "Unable to find python"',
                 r'[ -z "`which pip`" ] && [ ! -x /usr/local/bin/pip ] && { curl -L %s | python; }' % self.get_pip_url,
                 r'PIP_PATH=`which pip`',
                 r'PIP_PATH=${PIP_PATH:-/usr/local/bin/pip}',
                 r'[ ! -x "$PIP_PATH" ] && FATAL 1 "Unable to find/install pip, which is required"',
-                r'$PIP_PATH install %s || FATAL 1 "Unable to install cfn-init tools"' % self.aws_cfn_bootstrap_url,
+                r'[ -z "`which cfn-get-metadata`" ] && [ ! -x /usr/local/bin/cfn-get-metadata ] && $PIP_PATH install %s' % self.aws_cfn_bootstrap_url,
+                r'CFN_GETMETA_PATH=`which cfn-get-metadata`',
+                r'CFN_GETMETA_PATH=${CFN_GETMETA_PATH:-/usr/local/bin/cfn-get-metadata}',
+                r'[ ! -x "$CFN_GETMETA_PATH" ] && FATAL 1 "Unable to find cfn-init tools"',
             ]),
             "\n",
             'export AWS__STACK_NAME="', AWS.StackName ,'" ',
