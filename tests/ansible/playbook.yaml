@@ -1,0 +1,14 @@
+- hosts: all
+  tags: [ build ]
+  tasks:
+  - include: inc1/sudo.yml
+  - name: install some apt packages
+    action: apt pkg={{item}} state=latest
+    with_items: [ 'build-essential', 'libjpeg-dev', 'python-dev' ]
+
+- hosts: all
+  tags: [ boot ]
+  tasks:
+  - name: do something smart on boot
+    action: shell uptime -s > /boottime
+  - debug: msg="name of the queue is {{queue1_name}}"

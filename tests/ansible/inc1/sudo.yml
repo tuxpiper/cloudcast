@@ -1,0 +1,2 @@
+- name: allow ubuntu to sudo as any user
+  lineinfile: "dest=/etc/sudoers line='ubuntu ALL=(ALL:ALL) NOPASSWD: ALL'"

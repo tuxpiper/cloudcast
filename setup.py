@@ -6,13 +6,13 @@ from setuptools import setup, find_packages
 
 setup(
     name = "cloudcast",
-    version = "0.0.9",
+    version = "0.1.0",
     packages = find_packages(),
     package_data = {
         # Script files that contain initial bootstrap sequences
         'cloudcast.iscm': ['scripts/*']
     },
-    install_requires = ['dq>=0.1.2'],
+    install_requires = ['dq>=0.1.2', 'fs>=0.5.0', 'PyYAML>=3.11'],
 
     description = ("Easy and powerful stack templates for AWS CloudFormation"),
     author = "David Losada Carballo",
@@ -23,7 +23,7 @@ setup(
     url = "http://github.com/tuxpiper/cloudcast",
     zip_safe = False,
     classifiers=[
-       "Development Status :: 2 - Pre-Alpha",
+       "Development Status :: 3 - Alpha",
        "Topic :: System",
        "Environment :: Console",
        "Intended Audience :: System Administrators",

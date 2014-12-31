@@ -40,7 +40,7 @@ For instance:
 	    }]
 	    ),
 	)
-	
+
 If you are familiar with AWS and CFN, this structure shouldn't be strange to you.
 We have just declared an ELB resource with some properties.
 
@@ -86,6 +86,19 @@ the relevant objects to be included in the CloudFormation template (resources,
 outputs, parameters..). It shouldn't get confused with any other code you
 may have there.
 2. The template will be printed out for you to feed into CloudFormation.
+
+Deploying software on the instances
+-----------------------------------
+
+Cloudcast helps you embed your instance software configuration into your
+CloudFormation templates. In order to do that, it allows you to leverage
+some technologies that are usually applied for this purpose:
+
+  - [cfn-init](http://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/cfn-init.html)
+  - shell scripts
+  - [ansible](http://www.ansible.com)
+  
+The support for this is fairly extensible, so it wouldn't be too far fetched to add support for other SCMs like Chef or Puppet.
 
 Special thanks
 --------------

@@ -34,7 +34,7 @@ class Shell(object):
 
     def install(self, iscm):
         # This iscm module uses the cfn-init module to deploy and execute
-        # its payload. If it's not installed 
+        # its payload. If it's not installed we shall fail
         if not hasattr(iscm, "iscm_cfninit_add_config"):
             raise RuntimeError("The Shell ISCM module depends on the CfnInit module to be installed in the same chain")
 

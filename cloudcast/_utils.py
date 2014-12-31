@@ -13,7 +13,6 @@ def caller_folder():
 
 def search_file(filepath, *where):
     if not os.path.isabs(filepath):
-        # Search relative to the caller, the stack and cwd
         search_paths = map(lambda x: os.path.join(x, filepath), where)
         for p in search_paths:
             if os.path.isfile(p):
@@ -21,6 +20,16 @@ def search_file(filepath, *where):
         return None
     else:
         return filepath
+
+def search_path(path, *where):
+    if not os.path.isabs(path):
+        search_paths = map(lambda x: os.path.join(x, path), where)
+        for p in search_paths:
+            if os.path.exists(p):
+                return p
+        return None
+    else:
+        return path    
 
 def walk_values(obj):
     if type(obj) == dict:
