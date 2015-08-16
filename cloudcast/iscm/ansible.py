@@ -10,8 +10,11 @@ import os
 _ansibleinstall_script = os.path.join(os.path.dirname(__file__), "scripts", "install_ansible.sh")
 
 """
-Wrapper for the standard pattern of having ansible initialization and boot
-module
+Wrapper for the standard pattern of having ansible initialization and boot module.
+
+Some examples:
+
+
 """
 class AnsibleISCM(PhasedISCM):
   def __init__(self, **kwargs):
@@ -37,7 +40,7 @@ class AnsibleISCM(PhasedISCM):
     cfg_kwargs['_basepath'] = caller_folder()
     cfg_module = AnsibleConfig(**cfg_kwargs)
 
-    # Standard set of build phases: cconfig, build, boot
+    # Standard set of build phases: config, build, boot
     phases = [ RunAlways( "AnsibleConfig", [ cfg_module ] ) ]
     if cfg_module.run_manager.has_run('build'):
       phases.append(RunOnce("Ansible-Build", [ Ansible('build') ]))
@@ -100,8 +103,7 @@ class AnsibleConfig(object):
       raise RuntimeError("Can't interpolate absolute path in the instance for playbooks to be!")
     self.config['_inst_playbook_path'] = inst_pb_dest_path
 
-  def _get_ansible_install_facts_cfninit(self, iscm):
-    stack_user_key = iscm.iscm_cfninit_get_stack_user_key()
+  def _get_ansible_install_inventory(self, iscm):
     ans_home = self.config['ansible_home']
     return dict(
       files= {
@@ -110,12 +112,17 @@ class AnsibleConfig(object):
              "[local]\n" + \
              "localhost\n\n" + \
              "[targets]\n" + \
-             "localhost\tansible_connection=local\n",
+             "localhost\tansible_connection=local ansible_python_interpreter=%s/bin/python\n" % ans_home,
             owner= 'root',
             group= 'root',
             mode= "000644"
             )
-        },
+        })
+
+  def _get_ansible_install_facts_cfninit(self, iscm):
+    stack_user_key = iscm.iscm_cfninit_get_stack_user_key()
+    ans_home = self.config['ansible_home']
+    return dict(
       commands= dict(
         ansible_get_facts= dict(
           command= {
@@ -151,8 +158,15 @@ class AnsibleConfig(object):
     self.run_manager.install(iscm)
 
   def deploy(self, iscm):
+    stack_user_key = iscm.iscm_cfninit_get_stack_user_key()
     # Place the context variables (facts) into a section of the metadata
     facts_md_entry = "_ansible_facts"
+    # Add aws config to facts
+    self.facts.update({
+      'aws_access_key': stack_user_key,
+      'aws_secret_key': stack_user_key["SecretAccessKey"],
+      'aws_region': AWS.Region
+    })
     iscm.iscm_md_update_dict(facts_md_entry, self.facts)
     # Make sure ansible is installed
     CfnEmbedFile(src_file=_ansibleinstall_script, dest_path="/root/install-ansible.sh", owner="root", group="root", mode="000700").deploy(iscm)
@@ -168,7 +182,10 @@ class AnsibleConfig(object):
           }
         },
         "_ansible_install")
-    iscm.iscm_cfninit_add_config(self._get_ansible_install_facts_cfninit(iscm), "_ansible_install_facts");
+    # Add inventory file
+    iscm.iscm_cfninit_add_config(self._get_ansible_install_inventory(iscm), "_ansible_install_inventory")
+    # Install facts
+    iscm.iscm_cfninit_add_config(self._get_ansible_install_facts_cfninit(iscm), "_ansible_install_facts")
     # Embed the playbook sources
     self.pb_sources.deploy(iscm)
     # Deploy the script that wraps the ansible runs as specified
@@ -197,23 +214,34 @@ class _AnsiblePlaybookSources(object):
 
   # Plain method to embed the playbook contents into the cloudformation template
   def _fs_to_cfninit_plain(self):
+    from base64 import b64encode
     # Create a metadata object that, when executed by cfn-init, will result in the files
     # being created in the instance
     from os.path import join
     files_obj = {}
     target = self.config['_inst_playbook_path']
     for (fs_dir, fs_dirfiles) in self.fs.walk():
+      # TODO: more deterministic order of walking through the files
       if fs_dir[0] == '/': fs_dir = fs_dir[1:]
       t = join(target, fs_dir)
       for f in fs_dirfiles:
         src = join(fs_dir, f)
         dest = join(t, f)
+        encoding= None
+        try:
+          contents= self.fs.getcontents(src, mode='rb')
+          contents.decode('utf-8')
+        except UnicodeDecodeError:
+          encoding= "base64"
+          contents= b64encode(contents)
+
         files_obj[dest] = dict(
-          content= self.fs.getcontents(src),
+          content= contents,
           owner= self.config['inst_user'],
           group= self.config['inst_group'],
           mode= "000640"
           )
+        files_obj[dest].update( {"encoding": encoding} if encoding else {} )
     return files_obj
 
   def deploy(self, iscm):
@@ -279,7 +307,7 @@ Initializes and manages the deployment of the different ansible runs
 class _AnsibleRunManager(object):
   def __init__(self, boot=None, runs=None, ansible_config={}):
     if boot is not None:
-      self.runs = { boot: _AnsibleRun(boot) }
+      self.runs = { "boot": _AnsibleRun(boot) }
     else:
       self.runs = dict( map( lambda(k,v): (k, _AnsibleRun(v,k)), runs.items()) )
     self.ansible_config = ansible_config

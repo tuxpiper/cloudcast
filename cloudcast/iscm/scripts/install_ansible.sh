@@ -38,5 +38,6 @@ case "$LSB_DISTRO" in
     ;;
 esac
 
+pip install boto==2.38.0
 pip install ansible==${ANSIBLE_VERSION}
 
