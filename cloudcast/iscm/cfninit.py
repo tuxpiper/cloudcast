@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 import copy, types
 
-_default_get_pip_url = "https://raw.githubusercontent.com/pypa/pip/develop/contrib/get-pip.py"
+_default_get_pip_url = "https://bootstrap.pypa.io/get-pip.py"
 _default_aws_cfn_bootstrap_url = "https://s3.amazonaws.com/cloudformation-examples/aws-cfn-bootstrap-1.3.16.tar.gz"
 
 from cloudcast.iscm import IscmExpr
